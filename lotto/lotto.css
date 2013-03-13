@@ -1,0 +1,50 @@
+@charset "utf-8";
+
+img#valid {
+	border: none;
+	width: 88px;
+	height: 31px;
+}
+
+table {
+	border-spacing: 0px;
+}
+
+table#lotto td {
+	border-bottom: solid black 1px;
+	border-left: solid black 2px;
+	border-right: solid black 2px;
+	text-align: center;
+}
+
+table#lotto tr:first-child td {
+	font-weight: 800;
+	font-style: normal;
+	border-bottom: double black 3px;
+	border-top: solid black 2px;
+	width: 45px;
+}
+
+table#lotto tr.last-child td {
+	border-bottom: solid black 2px;
+}
+
+table#lotto td.index {
+	font-style: italic;
+}
+
+table#lotto td.szam, table#lotto td#szam {
+	border-right: solid black 2px;
+	border-left: solid black 1px;
+}
+
+table#lotto td.index, table#lotto td#index {
+	border-left: solid black 2px;
+	border-right: solid black 1px;
+}
+
+input#refresh {
+	width: 99px;
+	border: solid black 1px;
+	background-color: rgb(255,255,255);
+}

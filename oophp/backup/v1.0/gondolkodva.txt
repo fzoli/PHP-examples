@@ -1,0 +1,81 @@
+1 mp    =         1 mp
+1 perc  =        60 mp
+1 óra   =      3600 mp
+1 nap   =     86400 mp
+1 hónap =   2419200 mp /  2505600 mp / 2592000 mp / 2678400 mp
+1 év    =  31536000 mp / 31622400 mp
+
+bannolva	most
+120		101	19
+
+INSERT INTO `logon` (`user`,`key`,`failed`,`expire`) VALUES ('fzoli','a','1',unix_timestamp()+attemptBantime())
+ON DUPLICATE KEY 
+UPDATE `failed`=`failed`+1 , `expire`=unix_timestamp()+attemptBantime();
+
+a PHP adatot kér az SQL getLoginInfo eljárásával, ami a következõket tartalmazhatja:
+ - a felhasználó összes adata, ha be van jelentkezve valaki ÉS bent maradhat az oldalon - ez tulajdonképpen a getUserData eljárás (az user id-t az `azon` oszlop tartalmazza)
+ - üres, ha nincs bejelentkezve felhasználó
+ - egy `error` oszlop a hibakód értékével és - a hibakódhoz tartozó érték - a `data` oszlop, ha a felhasználó be volt jelentkezve, de már nem maradhat bent az oldalon. Példa: bannolva 10 percre, bannolva örökre
+   a hibakód értelmezése a PHP-ban történik egy tömb (hibakód => szöveg) segítségével.
+
+A getLoginInfo eljárás felhasználja a getUserData eljárást és az userCheck eljárást.
+
+A felhasználók bejelentkezése az userLogin eljárással történik, ami annyiban tér el a getLoginInfo eljárástól, hogy azonosítja a belépõt egy azon-jelszó párossal illetve kéri a sessid-t, amit lecserél a changeSessionId segítségével.
+Visszatérési érték:
+ - ha létezõ user és userCheck szerint is OK, az új sessid értékét is közli, amit aztán a PHP be fog állítani a Session::setSessId eljárás segítségével.
+
+Az eljárások átmeneti táblán keresztül kommunikálnak egymással.
+Az átmeneti táblát az userCheck függvényt meghívó hozza létre a meghívás elõtt.
+Az userCheck ha létezik a tábla, beleszúrja az infót még a select visszaadása elõtt.
+
+------------------------------------------------------------------------------------------------------------------------------------------
+
+setUser(azon,pass,sessid):
+ ha azon létezik:                                - létezõ felhasználó
+  ha azon-pass létezik:                          - jó jelszó
+   ha user beléphet:                             - beléphet a felhasználó
+    session id csere
+    sessid ÉS user összes adatának visszaadása   - sessid és minden adat visszaadása pl. azon, pass, név, ... ,read_jog, write_jog, ...
+   különben:                                     - nem léphet be a felhasználó
+    hibakód, érték visszaadása                   - hiba jelzése: pl. ban-örökre, ban-10 percre, sokszor elrontott jelszó-10 perc ban
+  különben:                                      - rossz jelszó
+   belépési lehetõség csökkentése                - user-key-failed mezõ frissítése/létrehozása és failed növelése 1-el
+   hibakód, érték visszaadása                    - hiba jelzése: rossz jelszó-3 lehetõség maradt
+ különben:                                       - nem létezõ felhasználó
+  hibakód visszaadása                            - hiba jelzése: nem létezõ felhasználó
+
+
+
+getUser(sessid):
+ ha van belépve user:                            - a sessionhöz tartozó azon oszlop értéke nem NULL
+  ha user beléphet:                              - beléphet a felhasználó
+   user összes adatának visszaadása              - minden adat visszaadása
+  különben:                                      - nem léphet be a felhasználó
+   hibakód, érték visszaadása                    - hiba jelzése
+
+isUserSet(azon):
+ha létezik: return true
+különben: return false
+
+userCheck(sessid):
+azon megszerzése
+tiltott, bann_lejár megszerzése azon alapján
+ha tiltva tábla(1,0) return: false
+ha bannolva tábla(1,x) return: false
+kulcs megszerzése
+hibadb megszerzése kulcs és azon alapján
+ha hibaDb üres vagy nagyobb maxAttemptnél return true
+különben tábla(2) return false
+
+Segéd eljárások:
+ - létezõ user: isUserSet(azon)
+ - user beléphet: userCheck(sessid)
+ - session id csere: changeSessionId(sessid)
+ - user összes adatának visszaadása: getUserData(azon)
+
+Hibakódok jelentése:
+0    : nem létezõ felhasználó
+1, 0 : végleges bann
+1, x : x idõre bann
+2, x : nincs több belépés-próbálkozásra lehetõség, x idõre bann
+3, x : hibás jelszó, x próbálkozás maradt

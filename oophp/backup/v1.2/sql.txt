@@ -1,0 +1,546 @@
+DROP PROCEDURE IF EXISTS getUser;
+DELIMITER |
+	CREATE PROCEDURE getUser(IN sessid VARCHAR(80))
+	LANGUAGE SQL
+	READS SQL DATA
+		BEGIN
+			DECLARE fID VARCHAR(15);
+			SELECT `azon` INTO fID FROM `sessions` LIMIT 1;
+			IF NOT fID IS NULL THEN -- be van jelentkezve az user
+				IF userCheck(sessid) THEN
+					START TRANSACTION;
+						CALL getUserData(fID);
+					COMMIT;
+				ELSE
+					UPDATE `sessions` SET `azon` = NULL WHERE `id` = sessid LIMIT 1;
+					START TRANSACTION;
+						SELECT * FROM `logon_error` LIMIT 1;
+					COMMIT;
+				END IF;
+			ELSE
+				START TRANSACTION;
+					SELECT NULL AS 'azon' LIMIT 1;
+				COMMIT;
+			END IF;
+		END |
+DELIMITER ;
+select now()
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP PROCEDURE IF EXISTS setUser;
+DELIMITER |
+	CREATE PROCEDURE setUser(IN fID VARCHAR(15), IN password VARCHAR(40), IN sessid VARCHAR(80))
+	LANGUAGE SQL
+	READS SQL DATA
+		BEGIN
+			DECLARE nincsHiba BOOL;
+			DECLARE valid BOOL;
+			DECLARE sesskey VARCHAR(40);
+			DECLARE failDb TINYINT(2);
+			DECLARE bannolva DATETIME;
+			SET valid = false;
+			SET nincsHiba = false;
+			IF NOT isUserSet(fID) THEN
+				CREATE TEMPORARY TABLE IF NOT EXISTS `logon_error` (`code` TINYINT(2) UNSIGNED) ENGINE MEMORY;
+				INSERT INTO `logon_error` (`code`) VALUES (0);
+			ELSE
+				SELECT count(`azon`)=1 INTO valid FROM `user` WHERE `azon` = fID AND `jelszo` = password LIMIT 1;
+				IF valid THEN
+					UPDATE `sessions` SET `azon` = fID WHERE `id` = sessid LIMIT 1;
+					SET nincsHiba = userCheck(sessid);
+				ELSE
+					SELECT `key` INTO sesskey FROM `sessions` WHERE `id` = sessid LIMIT 1;
+					INSERT INTO `logon` (`user`,`key`,`failed`,`expire`) VALUES (fID,sesskey,'1',date_add(now(),interval attemptBantime() second))
+						ON DUPLICATE KEY
+							UPDATE `failed` = IF(`failed`<maxAttempt(), `failed` + 1, `failed`);
+					SELECT `failed` , `expire` INTO failDb , bannolva FROM `logon` WHERE `user` = fID AND `key` = sesskey LIMIT 1;
+					IF bannolva<=now() THEN
+						SET bannolva = date_add(now(),interval attemptBantime() second);
+						SET failDb = maxAttempt()-2;
+						UPDATE `logon` SET `expire` = bannolva , `failed` = failDb WHERE `user` = fID AND `key` = sesskey LIMIT 1;
+					END IF;
+					IF maxAttempt()-failDb > 0 THEN
+						CREATE TEMPORARY TABLE IF NOT EXISTS `logon_error` (`code` TINYINT(2) UNSIGNED, `value` TINYINT(1) UNSIGNED) ENGINE MEMORY;
+						INSERT INTO `logon_error` (`code`,`value`) VALUES (3,maxAttempt()-failDb);
+					ELSE
+						CREATE TEMPORARY TABLE IF NOT EXISTS `logon_error` (`code` TINYINT(2) UNSIGNED, `value` DATETIME) ENGINE MEMORY;
+						INSERT INTO `logon_error` (`code`,`value`) VALUES (2,bannolva);
+					END IF;
+				END IF;
+			END IF;
+			IF nincsHiba THEN
+				START TRANSACTION;
+					CALL getUserData(fID);
+				COMMIT;
+			ELSE
+				UPDATE `sessions` SET `azon` = null WHERE `id` = sessid LIMIT 1;
+				START TRANSACTION;
+					SELECT * FROM `logon_error` LIMIT 1;
+				COMMIT;
+			END IF;
+		END |
+DELIMITER ;
+select now()
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+-- visszaad egy táblát, ami tartalmazza a felhasználó adatait
+DROP PROCEDURE IF EXISTS getUserData;
+DELIMITER |
+	CREATE PROCEDURE getUserData(IN id VARCHAR(15))
+	LANGUAGE SQL
+	READS SQL DATA
+		BEGIN
+			DECLARE code INT(2);
+			DECLARE loginDarab INT;
+			SELECT `jog` INTO code FROM `user` WHERE `azon` = id LIMIT 1;
+			SELECT count(*) INTO loginDarab FROM `sessions` WHERE `azon` = id;
+			START TRANSACTION;
+				SELECT *, u.`azon` AS 'azon', loginDarab AS 'login_darab' FROM `user` AS u, `jog` AS j WHERE u.`azon` = id AND j.`azon` = code LIMIT 1;
+			COMMIT;
+		END |
+DELIMITER ;
+select now()
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS isUserSet;
+DELIMITER |
+	CREATE FUNCTION isUserSet(user VARCHAR(15))
+		RETURNS BOOL
+		DETERMINISTIC
+			BEGIN
+				DECLARE ret TINYINT(1);
+				SET ret=0;
+				SELECT count(`azon`) INTO ret FROM `user` WHERE `azon` = user LIMIT 1;
+				RETURN ret=1;
+			END |
+DELIMITER ;
+SELECT isUserSet("fzoli")
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS userCheck;
+DELIMITER |
+	CREATE FUNCTION userCheck(sessid VARCHAR(80))
+		RETURNS BOOL
+		DETERMINISTIC
+			BEGIN
+				DECLARE tiltva BOOL;
+				DECLARE bannolva DATETIME;
+				DECLARE fID VARCHAR(15);
+				DECLARE kulcs VARCHAR(40);
+				DECLARE hibaDb TINYINT(2);
+				SELECT `azon` INTO fID FROM `sessions` WHERE `id` = sessid LIMIT 1;
+				SELECT `tiltott` , `bann_lejar` INTO tiltva , bannolva FROM `user` WHERE `azon` = fID LIMIT 1;
+				IF tiltva THEN
+					CREATE TEMPORARY TABLE IF NOT EXISTS `logon_error` (`code` TINYINT(2) UNSIGNED, `value` TINYINT(1) UNSIGNED) ENGINE MEMORY;
+					INSERT INTO `logon_error` (`code`,`value`) VALUES (1, 0);
+					RETURN false;
+				END IF;
+				IF bannolva > now() THEN
+					CREATE TEMPORARY TABLE IF NOT EXISTS `logon_error` (`code` TINYINT(2) UNSIGNED, `value` DATETIME) ENGINE MEMORY;
+					INSERT INTO `logon_error` (`code`,`value`) VALUES (1, bannolva);
+					RETURN false;
+				END IF;
+				SELECT `key` INTO kulcs FROM `sessions` WHERE `id` = sessid LIMIT 1;
+				SELECT `failed`, `expire` INTO hibaDb, bannolva FROM `logon` WHERE `user` = fID AND `key` = kulcs LIMIT 1;
+				IF hibaDb IS NULL OR hibaDb<maxAttempt() OR bannolva<=now() THEN
+					RETURN true;
+				ELSE
+					CREATE TEMPORARY TABLE IF NOT EXISTS `logon_error` (`code` TINYINT(2) UNSIGNED, `value` DATETIME) ENGINE MEMORY;
+					INSERT INTO `logon_error` (`code`,`value`) VALUES (2, bannolva);
+					RETURN false;
+				END IF;
+			END |
+DELIMITER ;
+SELECT userCheck("asd")
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP TRIGGER IF EXISTS setLastUserRequest;
+DELIMITER |
+	CREATE TRIGGER setLastUserRequest BEFORE UPDATE ON `sessions`
+	FOR EACH ROW
+	BEGIN
+		UPDATE `user` SET `utolso_keres` = now() WHERE `azon` = NEW.`azon` LIMIT 1;
+	END |
+DELIMITER ;
+select now()
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS attemptBantime;
+DELIMITER |
+	CREATE FUNCTION attemptBantime()
+		RETURNS INT(5) UNSIGNED
+		DETERMINISTIC
+			BEGIN
+				DECLARE ret INT(5) UNSIGNED;
+				SELECT `attempt_bantime` INTO ret FROM `var` LIMIT 1;
+				RETURN ret;
+			END |
+DELIMITER ;
+SELECT attemptBantime()
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS maxAttempt;
+DELIMITER |
+	CREATE FUNCTION maxAttempt()
+		RETURNS TINYINT(2) UNSIGNED
+		DETERMINISTIC
+			BEGIN
+				DECLARE ret TINYINT(2) UNSIGNED;
+				SELECT `max_attempt` INTO ret FROM `var` LIMIT 1;
+				RETURN ret;
+			END |
+DELIMITER ;
+SELECT maxAttempt()
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+-- DROP FUNCTION IF EXISTS isTableSet;
+-- DELIMITER |
+-- 	CREATE FUNCTION isTableSet(s_table_name VARCHAR(255))
+-- 		RETURNS BOOL
+-- 		DETERMINISTIC
+-- 			BEGIN
+-- 				IF EXISTS(SELECT 1 FROM Information_schema.tables WHERE table_name = s_table_name AND table_schema = 'user') THEN
+-- 					RETURN true;
+-- 				ELSE
+-- 					RETURN false;
+-- 				END IF;
+-- 
+-- 			END |
+-- DELIMITER ; 
+-- select now();
+
+-- ----------------------------------------------- session ------------------------------------------------ --
+-- ----------------------------------------------- session ------------------------------------------------ --
+
+DROP PROCEDURE IF EXISTS setSessionData;
+DELIMITER |
+	CREATE PROCEDURE setSessionData(sessid VARCHAR(80), adat TEXT)
+		BEGIN
+			UPDATE `sessions` SET `data` = adat, `expire` = getExpire() WHERE `id` = sessid LIMIT 1;
+		END |
+DELIMITER ;
+CALL setSessionData("asd","asd")
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS getSessionData;
+DELIMITER |
+CREATE FUNCTION getSessionData(sessid VARCHAR(80))
+	RETURNS TEXT
+	DETERMINISTIC
+		BEGIN
+			DECLARE ret TEXT;
+			SELECT `data` INTO ret FROM `sessions` WHERE `id` = sessid LIMIT 1;
+			RETURN IF(isnull(ret),"",ret);
+		END |
+DELIMITER ;
+select getSessionData('asd');
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS changeSessionIdIfNeed;
+DELIMITER |
+CREATE FUNCTION changeSessionIdIfNeed(sessid VARCHAR(80))
+	RETURNS VARCHAR(80)
+	DETERMINISTIC
+		BEGIN
+			IF isSessionIdSet(sessid) THEN
+				RETURN IF(needChangeSessionId(sessid),changeSessionId(sessid),"0");
+			END IF;
+			RETURN null;
+		END |
+DELIMITER ;
+select changeSessionIdIfNeed('asd');
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS changeSessionId;
+DELIMITER |
+CREATE FUNCTION changeSessionId(sessid VARCHAR(80))
+	RETURNS VARCHAR(80)
+	DETERMINISTIC
+		BEGIN
+			DECLARE newid VARCHAR(80);
+			IF isSessionIdSet(sessid) THEN
+				SET newid = getNewSessionId();
+				UPDATE `sessions` SET `id` = newid, `last_idchange` = unix_timestamp() WHERE `id` = sessid LIMIT 1;
+				RETURN newid;
+			END IF;
+			RETURN null;
+		END |
+DELIMITER ;
+select changeSessionId('asd');
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS getLastSessionIdChange;
+DELIMITER |
+CREATE FUNCTION getLastSessionIdChange(sessid VARCHAR(80))
+	RETURNS BIGINT(11) UNSIGNED
+	DETERMINISTIC
+		BEGIN
+			DECLARE req BIGINT(11) UNSIGNED;
+			SELECT `last_idchange` INTO req FROM `sessions` WHERE `id` = sessid LIMIT 1;
+			RETURN IF(isSessionIdSet(sessid),req,null);
+			
+		END |
+DELIMITER ;
+select getLastSessionIdChange('asd');
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS getLastSessionRequest;
+DELIMITER |
+CREATE FUNCTION getLastSessionRequest(sessid VARCHAR(80))
+	RETURNS BIGINT(11) UNSIGNED
+	DETERMINISTIC
+		BEGIN
+			DECLARE req BIGINT(11) UNSIGNED;
+			SELECT `expire`-lifetime() INTO req FROM `sessions` WHERE `id` = sessid LIMIT 1;
+			RETURN IF(isSessionIdSet(sessid),req,null);
+			
+		END |
+DELIMITER ;
+select getLastSessionRequest('asd');
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS needChangeSessionId;
+DELIMITER |
+CREATE FUNCTION needChangeSessionId(sessid VARCHAR(80))
+	RETURNS BOOL
+	DETERMINISTIC
+		BEGIN
+			DECLARE req BIGINT(11) UNSIGNED;
+			DECLARE count TINYINT(1) UNSIGNED;
+			DECLARE maxRefresh TINYINT(1) UNSIGNED;
+			SET maxRefresh = 5;
+			SET req = getLastSessionIdChange(sessid);
+			IF unix_timestamp()<req+changetime()-1 THEN
+				UPDATE `sessions` SET `counter` = 0 WHERE `id` = sessid LIMIT 1;
+			END IF;
+			IF unix_timestamp()=req+changetime()-1 THEN
+				UPDATE `sessions` SET `counter` = `counter`+1 WHERE `id` = sessid LIMIT 1;
+				SELECT `counter` INTO count FROM `sessions` WHERE `id` = sessid LIMIT 1;
+				IF count >= maxRefresh THEN
+					UPDATE `sessions` SET `last_idchange` = unix_timestamp()+1 WHERE `id` = sessid LIMIT 1;
+				END IF;
+			END IF;
+			IF unix_timestamp()>=req+changetime() THEN
+				SELECT `counter` INTO count FROM `sessions` WHERE `id` = sessid LIMIT 1;
+				RETURN count < maxRefresh;
+			END IF;
+			RETURN false;
+		END |
+DELIMITER ;
+select needChangeSessionId('asd');
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+SET GLOBAL event_scheduler = ON; -- be kell állítani minden szerver startkor vagy a configba véglegesen betenni!
+
+DROP EVENT IF EXISTS gc;
+DELIMITER |
+CREATE EVENT gc ON SCHEDULE EVERY 1 MINUTE DO
+	BEGIN
+		CALL session_gc();
+		CALL logon_gc();
+	END |
+DELIMITER ;
+select now()
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP PROCEDURE IF EXISTS logon_gc;
+DELIMITER |
+	CREATE PROCEDURE logon_gc()
+		BEGIN
+			DELETE FROM `logon` WHERE `expire`<=now();
+		END |
+DELIMITER ;
+CALL logon_gc()
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP PROCEDURE IF EXISTS session_gc;
+DELIMITER |
+	CREATE PROCEDURE session_gc()
+		BEGIN
+			DELETE FROM `sessions` WHERE `expire`<=unix_timestamp();
+		END |
+DELIMITER ;
+CALL session_gc()
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS changetime;
+DELIMITER |
+	CREATE FUNCTION changetime()
+		RETURNS BIGINT(3) UNSIGNED
+		DETERMINISTIC
+			BEGIN
+				DECLARE ret BIGINT(3) UNSIGNED;
+				SELECT `changetime` INTO ret FROM `var` LIMIT 1;
+				RETURN ret;
+			END |
+DELIMITER ;
+SELECT changetime()
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS lifetime;
+DELIMITER |
+	CREATE FUNCTION lifetime()
+		RETURNS BIGINT(4) UNSIGNED
+		DETERMINISTIC
+			BEGIN
+				DECLARE ret BIGINT(4) UNSIGNED;
+				SELECT `lifetime` INTO ret FROM `var` LIMIT 1;
+				RETURN ret;
+			END |
+DELIMITER ;
+SELECT lifetime()
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS getNewSessionId;
+DELIMITER |
+	CREATE FUNCTION getNewSessionId()
+		RETURNS VARCHAR(80)
+		DETERMINISTIC
+			BEGIN
+				DECLARE db TINYINT;
+				DECLARE azon VARCHAR(80);
+				DECLARE ok BOOL;
+				SET db = 0;
+				SET azon = concat(sha1(concat(unix_timestamp(),rand())),sha1(rand()));
+				SELECT count(*)=0 INTO ok FROM `sessions` WHERE `id`=azon;
+				WHILE NOT ok DO
+					SET db = db+1;
+					IF db>=9 THEN
+						RETURN NULL;
+					END IF;
+					SET azon = concat(sha1(concat(unix_timestamp(),rand())),sha1(rand()));
+					SELECT count(*)=0 INTO ok FROM `sessions` WHERE `id`=azon;
+				END WHILE;
+				RETURN azon;
+			END |
+DELIMITER ;
+SELECT getNewSessionId()
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS getExpire;
+DELIMITER |
+	CREATE FUNCTION getExpire()
+		RETURNS BIGINT(4) UNSIGNED
+		DETERMINISTIC
+			BEGIN
+				RETURN unix_timestamp()+lifetime();
+			END |
+DELIMITER ;
+select getexpire()
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS addSession;
+DELIMITER |
+	CREATE FUNCTION addSession(kulcs VARCHAR(40))
+		RETURNS VARCHAR(80)
+		DETERMINISTIC
+			BEGIN
+				DECLARE azon VARCHAR(80);
+				SET azon = getNewSessionId();
+				IF ISNULL(azon) THEN
+					RETURN null;
+				END IF;
+				INSERT INTO `sessions` (`id`, `key`, `expire`, `last_idchange`) VALUES (azon, kulcs, getExpire(), unix_timestamp());
+				RETURN azon;
+			END |
+DELIMITER ;
+SELECT addSession('asd')
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP PROCEDURE IF EXISTS delSession;
+DELIMITER |
+	CREATE PROCEDURE delSession(azon VARCHAR(80))
+		BEGIN
+			DELETE FROM `sessions` WHERE `id` = azon LIMIT 1;
+		END |
+DELIMITER ;
+CALL delSession("asd")
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS isSessionExpired;
+DELIMITER |
+	CREATE FUNCTION isSessionExpired(azon VARCHAR(80))
+		RETURNS BOOL
+		DETERMINISTIC
+			BEGIN
+				DECLARE exp INT;
+				SELECT `expire` INTO exp FROM `sessions` WHERE `id`=azon LIMIT 1;
+				RETURN IF(isNULL(exp),false,exp<=unix_timestamp());
+			END |
+DELIMITER ;
+SELECT isSessionExpired("asd")
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS isSessionIdSet;
+DELIMITER |
+	CREATE FUNCTION isSessionIdSet(azon VARCHAR(80))
+		RETURNS BOOL
+		DETERMINISTIC
+			BEGIN
+				DECLARE ret BOOL;
+				SELECT count(*)>0 INTO ret FROM `sessions` WHERE `id` = azon LIMIT 1;
+				RETURN ret;
+			END |
+DELIMITER ;
+SELECT isSessionIdSet("asd")
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS isSessionIdValid;
+DELIMITER |
+	CREATE FUNCTION isSessionIdValid(azon VARCHAR(80), kulcs VARCHAR(40))
+		RETURNS BOOL
+		DETERMINISTIC
+			BEGIN
+				DECLARE ret BOOL;
+				SELECT count(*)>0 INTO ret FROM `sessions` WHERE `id` = azon AND `key` = kulcs LIMIT 1;
+				RETURN ret;
+			END |
+DELIMITER ;
+SELECT isSessionIdValid("asd","asd")
+
+-- -------------------------------------------------- teszt ------------------------------------------------ --
+-- -------------------------------------------------- teszt ------------------------------------------------ --
+
+INSERT INTO wordcount (word,count) VALUES ('a_word',1) ON DUPLICATE KEY UPDATE count=count+1;
+
+DROP PROCEDURE IF EXISTS pr;
+DELIMITER |
+	CREATE PROCEDURE pr(IN id VARCHAR(15))
+	LANGUAGE SQL
+	READS SQL DATA
+		BEGIN
+			SET @str = CONCAT("call getUserData('",id,"')");
+			START TRANSACTION;
+				PREPARE asd FROM @str;
+				EXECUTE asd;
+				DEALLOCATE PREPARE asd;
+			COMMIT;
+		END |
+DELIMITER ;
+select now()

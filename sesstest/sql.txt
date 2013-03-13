@@ -1,0 +1,548 @@
+﻿-- ------------------------------------------ database settings ------------------------------------------- --
+-- ------------------------------------------ database settings ------------------------------------------- --
+
+CREATE DATABASE `user` DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;
+USE `user`;
+
+-- ------------------------------------------- database tables -------------------------------------------- --
+-- ------------------------------------------- database tables -------------------------------------------- --
+
+CREATE TABLE IF NOT EXISTS `sessions` (
+  `id` varchar(80) NOT NULL,
+  `key` varchar(40) NOT NULL,
+  `temp_id` varchar(80) DEFAULT NULL,
+  `data` text NOT NULL,
+  `login` varchar(15) DEFAULT NULL,
+  `new_session` tinyint(1) DEFAULT 1 NOT NULL,
+  `last_idchange` datetime NOT NULL,
+  `expire` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE (`temp_id`),
+  INDEX (`login`)
+) ENGINE=InnoDB;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+CREATE TABLE IF NOT EXISTS `var` (
+  `lifetime` bigint(4) unsigned NOT NULL,
+  `newsess_lifetime` bigint(4) unsigned NOT NULL,
+  `changetime` bigint(3) unsigned NOT NULL
+) ENGINE=MyISAM;
+
+INSERT INTO `var` (`lifetime`, `newsess_lifetime`, `changetime`) VALUES (600, 90, 5);
+
+-- ------------------------------------------ stored procedures ------------------------------------------- --
+-- ------------------------------------------ stored procedures ------------------------------------------- --
+
+DROP FUNCTION IF EXISTS isSessionNew;
+DELIMITER |
+CREATE FUNCTION isSessionNew(sessid VARCHAR(80))
+	RETURNS BOOL
+	DETERMINISTIC
+		BEGIN
+			DECLARE new BOOL;
+			SELECT `new_session` INTO new FROM `sessions` WHERE `id` = sessid OR `temp_id` = sessid;
+			RETURN new;
+		END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS getChangetime;
+DELIMITER |
+	CREATE FUNCTION getChangetime()
+		RETURNS BIGINT(3) UNSIGNED
+		DETERMINISTIC
+			BEGIN
+				DECLARE ret BIGINT(3) UNSIGNED;
+				SELECT `changetime` INTO ret FROM `var` LIMIT 1;
+				RETURN ret;
+			END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS getLifetime;
+DELIMITER |
+	CREATE FUNCTION getLifetime(newsess BOOLEAN)
+		RETURNS BIGINT(4) UNSIGNED
+		DETERMINISTIC
+			BEGIN
+				DECLARE ret BIGINT(4) UNSIGNED;
+				IF NOT newsess THEN
+					SELECT `lifetime` INTO ret FROM `var` LIMIT 1;
+				ELSE
+					SELECT `newsess_lifetime` INTO ret FROM `var` LIMIT 1;
+				END IF;
+				RETURN ret;
+			END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS getSessionLifetime;
+DELIMITER |
+	CREATE FUNCTION getSessionLifetime(sessid VARCHAR(80))
+		RETURNS BIGINT(4) UNSIGNED
+		DETERMINISTIC
+			BEGIN
+				DECLARE newsess BOOLEAN;
+				SELECT `new_session` INTO newsess FROM `sessions` WHERE `id` = sessid OR `temp_id` = sessid LIMIT 1;
+				RETURN getLifetime(newsess);
+			END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP PROCEDURE IF EXISTS setChangetime;
+CREATE PROCEDURE setChangetime(value BIGINT(3))
+	UPDATE `var` SET `changetime` = value LIMIT 1;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP PROCEDURE IF EXISTS setLifetime;
+DELIMITER |
+	CREATE PROCEDURE setLifetime(value BIGINT(4), newsess BOOLEAN)
+		BEGIN
+			IF newsess THEN
+				UPDATE `var` SET `newsess_lifetime` = value LIMIT 1;
+			ELSE
+				UPDATE `var` SET `lifetime` = value LIMIT 1;
+			END IF;
+		END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS getExpire;
+	CREATE FUNCTION getExpire(newsess BOOLEAN)
+		RETURNS DATETIME
+		DETERMINISTIC
+			RETURN date_add(now(),interval getLifetime(newsess) second);
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP PROCEDURE IF EXISTS setSessionData;
+CREATE PROCEDURE setSessionData(sessid VARCHAR(80), sessdata TEXT)
+	UPDATE `sessions` SET `data` = sessdata WHERE `id` = sessid LIMIT 1;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS getSessionData;
+DELIMITER |
+CREATE FUNCTION getSessionData(sessid VARCHAR(80))
+	RETURNS TEXT
+	DETERMINISTIC
+		BEGIN
+			DECLARE ret TEXT;
+			DECLARE exp DATETIME;
+			SELECT `data`, getExpire(`new_session`) INTO ret, exp FROM `sessions` WHERE `id` = sessid LIMIT 1;
+			UPDATE `sessions` SET `expire` = exp WHERE `id` = sessid LIMIT 1;
+			RETURN ret;
+		END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS randSessionId;
+CREATE FUNCTION randSessionId(salt VARCHAR(40))
+	RETURNS VARCHAR(80)
+	DETERMINISTIC
+		RETURN concat(sha1(concat(now(), rand())), sha1(concat(if(isnull(salt), '', salt), rand())));
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS isSessionIdFree;
+DELIMITER |
+CREATE FUNCTION isSessionIdFree(sessid VARCHAR(80))
+	RETURNS BOOL
+	DETERMINISTIC
+		BEGIN
+			DECLARE ok BOOL;
+			SELECT count(*) = 0 INTO ok FROM `sessions` WHERE `id` = sessid OR `temp_id` = sessid;
+			RETURN ok;
+		END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS getNewSessionId;
+DELIMITER |
+	CREATE FUNCTION getNewSessionId(salt VARCHAR(40))
+		RETURNS VARCHAR(80)
+		DETERMINISTIC
+			BEGIN
+				DECLARE db TINYINT;
+				DECLARE sessid VARCHAR(80);
+				DECLARE ok BOOL;
+				SET db = 1;
+				SET sessid = randSessionId(salt);
+				SET ok = isSessionIdFree(sessid);
+				WHILE NOT ok DO
+					IF db>=10 THEN
+						RETURN null;
+					END IF;
+					SET db = db+1;
+					SET sessid = randSessionId(salt);
+					SET ok = isSessionIdFree(sessid);
+				END WHILE;
+				RETURN sessid;
+			END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS isSessionIdSet;
+DELIMITER |
+	CREATE FUNCTION isSessionIdSet(sessid VARCHAR(80))
+		RETURNS BOOL
+		DETERMINISTIC
+			BEGIN
+				DECLARE ret BOOL;
+				SELECT count(*) > 0 INTO ret FROM `sessions` WHERE `id` = sessid LIMIT 1;
+				RETURN ret;
+			END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS getSessionKey;
+DELIMITER |
+CREATE FUNCTION getSessionKey(sessid VARCHAR(80))
+	RETURNS VARCHAR(40)
+	DETERMINISTIC
+		BEGIN
+			DECLARE sesskey VARCHAR(40);
+			SELECT `key` INTO sesskey FROM `sessions` WHERE `id` = sessid LIMIT 1;
+			RETURN sesskey;
+		END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS changeSessionId;
+DELIMITER |
+CREATE FUNCTION changeSessionId(sessid VARCHAR(80))
+	RETURNS VARCHAR(80)
+	DETERMINISTIC
+		BEGIN
+			DECLARE newid VARCHAR(80);
+			IF isSessionIdSet(sessid) THEN
+				SET newid = getNewSessionId(getSessionKey(sessid));
+				IF isnull(newid) THEN
+					RETURN sessid;
+				END IF;
+				UPDATE `sessions` SET `temp_id` = `id` WHERE `id` = sessid LIMIT 1;
+				UPDATE `sessions` SET `id` = newid, `last_idchange` = now() WHERE `id` = sessid LIMIT 1;
+				RETURN newid;
+			END IF;
+			RETURN null;
+		END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS isSessionIdInTemp;
+DELIMITER |
+CREATE FUNCTION isSessionIdInTemp(sessid VARCHAR(80))
+	RETURNS BOOL
+	DETERMINISTIC
+		BEGIN
+			DECLARE count TINYINT(1) UNSIGNED;
+			SELECT count(*) INTO count FROM `sessions` WHERE `temp_id` = sessid;
+			RETURN count > 0;
+		END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS isSessionIdExpired;
+CREATE FUNCTION isSessionIdExpired(sessid VARCHAR(80))
+	RETURNS BOOL
+	DETERMINISTIC
+		RETURN now() >= date_add(getLastSessionIdChange(sessid), interval getChangetime() second);
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS changeSessionIdIfNeed;
+DELIMITER |
+CREATE FUNCTION changeSessionIdIfNeed(sessid VARCHAR(80))
+	RETURNS VARCHAR(80)
+	DETERMINISTIC
+		BEGIN
+			DECLARE akt_id VARCHAR(80);
+			IF isSessionIdInTemp(sessid) THEN
+				SELECT `id` INTO akt_id FROM `sessions` WHERE `temp_id` = sessid;
+				RETURN akt_id;
+			ELSE
+				UPDATE `sessions` SET `new_session` = 0 WHERE `id` = sessid;
+			END IF;
+			RETURN IF(isSessionIdExpired(sessid), changeSessionId(sessid), null);
+		END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS getLastSessionIdChange;
+DELIMITER |
+CREATE FUNCTION getLastSessionIdChange(sessid VARCHAR(80))
+	RETURNS DATETIME
+	DETERMINISTIC
+		BEGIN
+			DECLARE req DATETIME;
+			SELECT `last_idchange` INTO req FROM `sessions` WHERE `id` = sessid LIMIT 1;
+			RETURN req;
+		END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS addSession;
+DELIMITER |
+	CREATE FUNCTION addSession(sesskey VARCHAR(40))
+		RETURNS VARCHAR(80)
+		DETERMINISTIC
+			BEGIN
+				DECLARE sessid VARCHAR(80);
+				SET sessid = getNewSessionId(sesskey);
+				IF isnull(sessid) THEN
+					RETURN null;
+				END IF;
+				INSERT INTO `sessions` (`id`, `key`, `expire`, `last_idchange`) VALUES (sessid, sesskey, getExpire(1), now());
+				RETURN sessid;
+			END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP PROCEDURE IF EXISTS delSession;
+	CREATE PROCEDURE delSession(sessid VARCHAR(80))
+		DELETE FROM `sessions` WHERE `id` = sessid LIMIT 1;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS isSessionIdValid;
+DELIMITER |
+	CREATE FUNCTION isSessionIdValid(sessid VARCHAR(80), sesskey VARCHAR(40))
+		RETURNS BOOL
+		DETERMINISTIC
+			BEGIN
+				DECLARE valid BOOL;
+				DECLARE temp VARCHAR(80);
+				SELECT count(*) > 0 INTO valid FROM `sessions` WHERE (`id` = sessid OR `temp_id` = sessid) AND `key` = sesskey LIMIT 1;
+				IF NOT isSessionIdInTemp(sessid) THEN
+					SELECT `temp_id` INTO temp FROM `sessions` WHERE `id` = sessid AND `key` = sesskey;
+					IF NOT isnull(temp) THEN
+						UPDATE `sessions` SET `temp_id` = null WHERE `id` = sessid AND `key` = sesskey;
+					END IF;
+				END IF;
+				RETURN valid;
+			END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS isSessionExpired;
+DELIMITER |
+	CREATE FUNCTION isSessionExpired(sessid VARCHAR(80))
+		RETURNS BOOL
+		DETERMINISTIC
+			BEGIN
+				DECLARE exp DATETIME;
+				SELECT `expire` INTO exp FROM `sessions` WHERE `id` = sessid LIMIT 1;
+				RETURN IF(isnull(exp), false, exp <= now());
+			END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP PROCEDURE IF EXISTS session_gc;
+CREATE PROCEDURE session_gc()
+	DELETE FROM `sessions` WHERE isSessionExpired(`id`);
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+-- egyenlőre teszt célból, de használva lesz majd egy bejelentkeztető SQL függvényben, ami hibakóddal tér vissza
+-- új session-be nem lehet bejelentkezni...
+DROP FUNCTION IF EXISTS setSessionLogin;
+DELIMITER |
+	CREATE FUNCTION setSessionLogin(sessid VARCHAR(80), sesslogin VARCHAR(15))
+		RETURNS BOOL
+		DETERMINISTIC
+			BEGIN
+				UPDATE `sessions` SET	`login` = sesslogin WHERE `id` = sessid AND `new_session` = 0;
+				RETURN row_count();
+			END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS getSessionLogin;
+DELIMITER |
+	CREATE FUNCTION getSessionLogin(sessid VARCHAR(80))
+		RETURNS VARCHAR(15)
+		DETERMINISTIC
+			BEGIN
+				DECLARE ret VARCHAR(15);
+				SELECT `login` INTO ret FROM `sessions` WHERE `id` = sessid LIMIT 1;
+				RETURN ret;
+			END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP PROCEDURE IF EXISTS delSessionLogin;
+CREATE PROCEDURE delSessionLogin(sessid VARCHAR(80))
+	UPDATE `sessions` SET `login` = null WHERE `id` = sessid;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS getSessionCount;
+DELIMITER |
+	CREATE FUNCTION getSessionCount()
+		RETURNS BIGINT UNSIGNED
+		DETERMINISTIC
+			BEGIN
+				DECLARE ret BIGINT UNSIGNED;
+				SELECT count(*) INTO ret FROM `sessions` WHERE `new_session` = 0;
+				RETURN ret;
+			END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+-- new_session részek bekommentezve, mert fölösleges mivel nem lehet új session-be bejelentkezni
+DROP FUNCTION IF EXISTS getLoginCount;
+DELIMITER |
+	CREATE FUNCTION getLoginCount()
+		RETURNS BIGINT UNSIGNED
+		DETERMINISTIC
+			BEGIN
+				DECLARE ret BIGINT UNSIGNED;
+				SELECT count(*) INTO ret FROM `sessions` WHERE `login` IS NOT null; -- AND `new_session` = 0;
+				RETURN ret;
+			END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS getDistinctLoginCount;
+DELIMITER |
+	CREATE FUNCTION getDistinctLoginCount()
+		RETURNS BIGINT UNSIGNED
+		DETERMINISTIC
+			BEGIN
+				DECLARE ret BIGINT UNSIGNED;
+				SELECT count(*) INTO ret FROM (
+						SELECT DISTINCT `login` FROM `sessions` WHERE `login` IS NOT null -- AND `new_session` = 0
+					) AS `alias`;
+				RETURN ret;
+			END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP FUNCTION IF EXISTS getGuestCount;
+DELIMITER |
+	CREATE FUNCTION getGuestCount()
+		RETURNS BIGINT UNSIGNED
+		DETERMINISTIC
+			BEGIN
+				DECLARE ret BIGINT UNSIGNED;
+				SELECT count(*) INTO ret FROM `sessions` WHERE `login` IS null AND `new_session` = 0;
+				RETURN ret;
+			END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+-- null paraméter miatt itt maradhat a new_session vizsgálat
+DROP FUNCTION IF EXISTS getUserCount;
+DELIMITER |
+	CREATE FUNCTION getUserCount(user VARCHAR(15))
+		RETURNS BIGINT UNSIGNED
+		DETERMINISTIC
+			BEGIN
+				DECLARE ret BIGINT UNSIGNED;
+				SELECT count(*) INTO ret FROM `sessions` WHERE `login` = user AND `new_session` = 0;
+				RETURN ret;
+			END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+DROP PROCEDURE IF EXISTS getLogins;
+DELIMITER |
+	CREATE PROCEDURE getLogins()
+		LANGUAGE SQL
+		READS SQL DATA
+			BEGIN
+				START TRANSACTION;
+					SELECT DISTINCT `login` FROM `sessions` WHERE `login` IS NOT null; -- AND `new_session` = 0;
+				COMMIT;
+			END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+-- DROP FUNCTION IF EXISTS getLastSessionRequest;
+-- DELIMITER |
+-- CREATE FUNCTION getLastSessionRequest(sessid VARCHAR(80))
+--	RETURNS DATETIME
+--	DETERMINISTIC
+--		BEGIN
+--			DECLARE req DATETIME;
+--			SELECT date_sub(`expire`, interval getLifetime(`new_session`) second) INTO req FROM `sessions` WHERE `id` = sessid LIMIT 1;
+--			RETURN req;
+--		END |
+-- DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+-- SET GLOBAL event_scheduler = ON;
+-- be kell állítani minden szerver startkor vagy a mysql configba véglegesen betenni ezt a [mysqld] részbe: event_scheduler = ON
+
+DROP EVENT IF EXISTS gc;
+DELIMITER |
+CREATE EVENT gc ON SCHEDULE EVERY 1 MINUTE DO
+	BEGIN
+		CALL session_gc();
+		-- ide jöhet a többi szemétgyűjtő eljárás
+	END |
+DELIMITER ;
+
+-- -------------------------------------------------------------------------------------------------------- --
+
+SELECT 1;
+
+-- -------------------------------------------- user settings --------------------------------------------- --
+-- -------------------------------------------- user settings --------------------------------------------- --
+
+CREATE USER 'sessionhandler'@'%' IDENTIFIED BY 'teszt';
+-- USE `user`;
+-- GRANT EXECUTE ON * TO 'sessionhandler'@'%'; -- ezzel minden függvény és eljárás futtatható az user adatbázisban, ...
+-- REVOKE EXECUTE ON * FROM 'sessionhandler'@'%'; -- ... de ez sem elég biztonságos, ezért felsorolom azt, amit a PHP használ:
+GRANT EXECUTE ON FUNCTION `user`.`isSessionIdValid` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON FUNCTION `user`.`addSession` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON FUNCTION `user`.`getSessionData` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON FUNCTION `user`.`changeSessionIdIfNeed` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON FUNCTION `user`.`changeSessionId` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON FUNCTION `user`.`getLifetime` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON PROCEDURE `user`.`setLifetime` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON FUNCTION `user`.`getChangetime` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON PROCEDURE `user`.`setChangetime` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON PROCEDURE `user`.`setSessionData` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON PROCEDURE `user`.`delSession` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON FUNCTION `user`.`setSessionLogin` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON FUNCTION `user`.`getSessionLogin` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON FUNCTION `user`.`getSessionCount` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON FUNCTION `user`.`getLoginCount` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON FUNCTION `user`.`getDistinctLoginCount` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON FUNCTION `user`.`getGuestCount` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON PROCEDURE `user`.`getLogins` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON FUNCTION `user`.`getUserCount` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON PROCEDURE `user`.`delSessionLogin` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON FUNCTION `user`.`getSessionLifetime` TO 'sessionhandler'@'%';
+GRANT EXECUTE ON FUNCTION `user`.`isSessionNew` TO 'sessionhandler'@'%';
+
+-- --------------------------------------------- THAT'S ALL ----------------------------------------------- --
