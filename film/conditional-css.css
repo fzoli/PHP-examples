@@ -1,0 +1,285 @@
+@charset "utf-8";
+
+@font-face {
+	font-family:"segoe";
+	src: url(segoe.eot);
+	src: local("Segoe Script"), url(segoe.ttf) format("truetype");
+}
+
+html, body {
+	height:100%;
+}
+
+body {
+	background-color:rgb(30,144,255);
+	margin:0;
+	overflow-y: scroll;
+	font-family:"Segoe Script","segoe","Comic Sans MS";
+	font-size:18px;
+}
+
+img {
+	border:none;
+}
+
+a:link, a:visited {
+	color: black;
+	text-decoration: none;
+}
+
+a:hover {
+	color:rgb(178,34,34);
+	[if Webkit] -webkit-transition: all 0.2s ease-in-out;
+}
+
+table#external, table#internal, table.menu, table.user, table.userout, table.info {
+	width:100%;
+	height:100%;
+	border-spacing:0px;
+}
+
+table.userout td {
+	width:25%;
+}
+
+table#external td#top, table#external td#bottom {
+	[if Gecko] height:10px;
+	[if Webkit] height: 10px;
+}
+
+table#external td#top {
+	[if ! Gecko][if ! Webkit] height: 10px;
+}
+
+table#external td#middle {
+	width:752px;
+	[if ! Gecko][if ! Webkit] height:96%;
+}
+
+table#external td#left {
+	background-image:url(files/left.png);
+	background-position: right top;
+}
+
+table#external td#right {
+	background-image:url(files/right.png);
+	background-position: left top;
+}
+
+table#internal,table#film_feltetel {
+	border:solid 1px #FFFFFF;
+}
+
+table#internal td#logo {
+	height:98px;
+	[if Gecko] height:101px;
+	[if Opera] height:101px;
+	text-align:center;
+	background-image:url(files/logo.png);
+	color:#FFFFFF;
+	font-size:22px;
+}
+
+table#internal td#logo, table#internal td.menu, table#internal td#warning, table#internal td.user, div.frame div.title {
+	border-bottom-style:solid;
+	border-bottom-color:#FFFFFF;
+	border-bottom-width:1px;
+}
+
+table#internal td.menu {
+	height:40px;
+	background-image:url(files/menu.png);
+	background-position:top left;
+	background-repeat:repeat-x;
+}
+
+table.menu td {
+	width:33.33%;
+	text-align:center;
+}
+
+table.user img, table.userout img, table.user input#submit, table.userout input#submit, table.user input {
+	margin-left:8px;
+	vertical-align:middle;
+}
+
+table#internal td#warning {
+	background-color:#FF0000;
+	color:#FFFFFF;
+	text-align:center;
+	height:32px;
+}
+
+table#internal td.user {
+	height:32px;
+}
+
+table#internal td#page {
+	vertical-align:top;
+}
+
+table#internal td.info {
+	height:50px;
+	border-top-style:solid;
+	border-top-width:1px;
+	border-top-color:#FFFFFF;
+}
+
+table.info td {
+	width:33.33%;
+	vertical-align:middle;
+	text-align:center;
+}
+
+table.info img {
+	vertical-align:middle;
+}
+
+div.frame {
+	margin:10px;
+	width: 726px;
+	border-style:solid;
+	border-color:#FFFFFF;
+	border-width:1px;
+}
+
+div.frame div.title {
+	padding-left:5px;
+}
+
+div.frame div.message {
+	padding-left:20px;
+	font-size:15px;
+}
+
+table.userout input.input, .button, #film_feltetelButton, select.film_feltetel, input#film_cim, input#oldalSet, input#elemSet {
+	background-color:rgb(30,144,255);
+	border-style:solid;
+	border-width:1px;
+	border-color:#FFFFFF;
+}
+
+table.userout input.input:focus, input#film_cim:focus, select.film_feltetel:focus, input#oldalSet:focus, input#elemSet:focus {
+	border-color:rgb(241,202,126);
+}
+
+input#film_feltetelButton:active{
+	border-color:rgb(0,0,0);
+}
+
+input#submit {
+	width:30px;
+	height:30px;
+}
+
+.toLeft {
+	text-align:left;
+}
+
+.toRight {
+	text-align:right;
+}
+
+.toCenter {
+	text-align:center;
+}
+
+.button:active {
+	border-color:#000000;
+}
+
+div.filmEditMenu table{
+	width:100%;
+	height:36px;
+	border-bottom-style:dashed;
+	border-color:#FFFFFF;
+	border-width:1px;
+}
+
+div.filmEditMenu td.opcio {
+	width:33.33%;
+	text-align:center;
+}
+
+table.lista, table.statInfo {
+	width:100%;
+}
+
+table.lista {
+	border-top:solid #FFFFFF 1px;
+}
+
+.film_input {
+	width:300px;
+}
+
+table#film_feltetel {
+	width:744px;
+	margin:2px;
+	margin-bottom:1px;
+}
+
+table#filmLista {
+	font-family:'Times New Roman';
+	width: 748px;
+	margin:0px;
+	font-weight:600;
+}
+
+div#divLista {
+	width:742px;
+	margin:2px;
+	margin-top:3px;
+}
+
+table#filmLista td, table#lista td, table#filmOldal, div#divLista {
+	border:solid #FFFFFF 1px;
+	text-align:center;
+}
+
+table.aktFilmInfo {
+	width:740px;
+	margin-left:auto;
+	margin-right:auto;
+	border-spacing:0px;
+}
+
+.aktFilmInfo td {
+  border: none !important;
+  text-align:left !important;
+}
+
+img.filmBorito {
+	width:60px;
+	height:90px;
+	display:none;
+	vertical-align:middle;
+}
+
+td.filmBorito {
+	width:64px;
+	height:94px;
+}
+
+table#lista {
+	font-family:'Times New Roman';
+	font-size:18px;
+	margin-bottom:1px;
+}
+
+table#filmOldal {
+	width:744px;
+	margin:2px;
+	margin-top:3px;
+	margin-bottom:5px;
+}
+
+input#oldalSet, input#elemSet {
+	text-align: center;
+	width: 40px;
+}
+
+td#film_oldalVissza:hover, td#film_oldalElore:hover, td.filmcim:hover, td.rend:hover {
+	cursor: pointer;
+	color: rgb(178,34,34);
+}

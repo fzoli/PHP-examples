@@ -1,0 +1,67 @@
+@charset "utf-8";
+
+[if IE] body {
+	behavior: url(csshover.htc);
+}
+
+[if IE] #menu ul li {
+	float: left;
+	width: 60px;
+}
+ 
+[if IE] #menu ul li a {
+	height: 1%;
+}
+
+#menu {
+	position:relative;
+	left:2px;
+	top:2px;
+	float: left;
+	width: 100%;
+	margin-top:1px;
+}
+
+#menu ul {
+	list-style-type: none;
+	margin: 0;
+	padding: 0;
+	background-color: #fff;
+}
+
+#menu a {
+	font: normal 14px verdana, tahoma, arial, sans-serif;
+	display: block;
+	margin: 0;
+	padding: 2px 3px;
+	color: #999999;
+	background: #F4F6F4;
+	text-decoration: none;
+	border: 1px solid #ECEEE4;
+}
+
+#menu a:hover {
+	color: #72815F;
+	background: #DAE6BD;
+}
+
+#menu a.aktiv, #menu a.aktiv:hover {
+	background:rgb(196,206,196);
+}
+
+#menu li {
+	position: relative;
+	float: left;
+	width: 248px;
+	text-align:center;
+}
+
+#menu ul ul {
+	position: absolute;
+	left: 0px;
+	display: none;
+}
+
+#menu ul li:hover ul {
+	display: block;
+}

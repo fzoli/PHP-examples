@@ -1,0 +1,108 @@
+@charset "utf-8";
+
+@font-face {
+	font-family:"segoe";
+	src: url(segoe.eot);
+	src: local("Segoe Script"), url(segoe.ttf) format("truetype");
+}
+
+html, body {
+	height:100%;
+}
+
+body {
+	background-color:rgb(30,144,255);
+	font-family:"Segoe Script","segoe","Comic Sans MS";
+	font-size:18px;
+	margin:0px;
+}
+
+table#regExternal {
+	width:100%;
+	height:100%;
+}
+
+table#regInternal, input.input, textarea#info, td#ok, td#nemOk, select#nem {
+	border: solid;
+	border-width: 1px;
+	border-color: white;
+}
+
+input.input, textarea#info, select#nem {
+	background-color:rgb(30,144,255);
+}
+
+textarea#info:focus, input:focus {
+	border-color:rgb(241,202,126);
+}
+
+table#regInternal {
+	width:740px;
+	height:340px;
+	margin-left:auto;
+	margin-right:auto;
+}
+
+textarea#info {
+	width:298px;
+	height: 91px;
+}
+
+input.input {
+	width:180px;
+}
+
+td#ok, td#nemOk {
+	color:white;
+	height:35px;
+}
+
+td#ok {
+	background-color:green;
+}
+
+td#nemOk {
+	background-color:red;
+}
+
+input#nev, input#email {
+	width:300px;
+}
+
+img#emailKey {
+	vertical-align:middle;
+}
+
+.toLeft {
+	text-align:left;
+}
+
+.toCenter {
+	text-align:center;
+}
+
+.toRight {
+	text-align:right;
+}
+
+.jtip {
+	cursor:help;
+}
+
+img#captchaImage {
+	border-color:#FFFFFF;
+	border-style:solid;
+	width:235px;
+	height:85px;
+}
+
+.button {
+	background-color:rgb(30,144,255);
+	border-style:solid;
+	border-width:1px;
+	border-color:#FFFFFF;
+}
+
+.button:active {
+	border-color:#000000;
+}
