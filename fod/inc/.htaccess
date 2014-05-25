@@ -1,0 +1,7 @@
+order deny,allow
+deny from all
+allow from none
+<FilesMatch ^sitemap\.(xml|xsl)\.php$>
+order allow,deny
+allow from all
+</FilesMatch>

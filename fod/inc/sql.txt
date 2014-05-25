@@ -1,0 +1,276 @@
+-- phpMyAdmin SQL Dump
+-- version 3.3.7deb7
+-- http://www.phpmyadmin.net
+--
+-- Hoszt: localhost
+-- Létrehozás ideje: 2014. jan. 03. 12:00
+-- Szerver verzió: 5.1.72
+-- PHP verzió: 5.3.3-7+squeeze17
+
+SET SQL_MODE="NO_AUTO_VALUE_ON_ZERO";
+
+--
+-- Adatbázis: `fod`
+--
+CREATE DATABASE `fod` DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;
+USE `fod`;
+
+-- --------------------------------------------------------
+
+--
+-- Tábla szerkezet: `dictionary`
+--
+
+CREATE TABLE IF NOT EXISTS `dictionary` (
+  `key` varchar(100) NOT NULL,
+  `lang` varchar(2) NOT NULL,
+  `text` varchar(255) NOT NULL,
+  PRIMARY KEY (`key`,`lang`),
+  UNIQUE KEY `text` (`text`),
+  KEY `lang` (`lang`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+--
+-- A tábla adatainak kiíratása `dictionary`
+--
+
+INSERT INTO `dictionary` (`key`, `lang`, `text`) VALUES
+('xml_sitemap_expl2a', 'hu', 'Az XML webhelytérképekről többet olvashat a'),
+('xml_sitemap_change_freq', 'en', 'Change Freq.'),
+('xml_sitemap_expl3a', 'hu', 'Ez a webhelytérkép'),
+('xml_sitemap_expl1', 'hu', 'Ez egy XML Webhelytérkép a keresőmotorok számára.'),
+('header_text', 'hu', 'Ide jön majd egy rendes kép és a design is át lesz színezve teljesen, csak a szerkezet marad.'),
+('xml_sitemap_images', 'en', 'Images'),
+('xml_sitemap_images', 'hu', 'Képek'),
+('xml_sitemap_last_change', 'en', 'Last Change'),
+('xml_sitemap_expl2b', 'hu', 'oldalon'),
+('xml_sitemap_priority', 'hu', 'Prioritás'),
+('xml_sitemap_priority', 'en', 'Priority'),
+('xml_sitemap_expl1', 'en', 'This is an XML Sitemap, meant for consumption by search engines.'),
+('header_text', 'en', 'This picture will be changed and the design will be recolored, but the structure won''t be changed.'),
+('xml_sitemap_expl3a', 'en', 'This sitemap contains'),
+('xml_sitemap_expl3b', 'hu', 'URL-t tartalmaz'),
+('xml_sitemap_expl3b', 'en', 'URLs'),
+('xml_sitemap_last_change', 'hu', 'Utolsó Módosítás'),
+('xml_sitemap_change_freq', 'hu', 'Változás Gyak.'),
+('xml_sitemap', 'en', 'XML Sitemap'),
+('xml_sitemap', 'hu', 'XML Webhelytérkép'),
+('xml_sitemap_expl2a', 'en', 'You can find more information about XML sitemaps on');
+
+-- --------------------------------------------------------
+
+--
+-- Tábla szerkezet: `lng`
+--
+
+CREATE TABLE IF NOT EXISTS `lng` (
+  `code` varchar(2) NOT NULL,
+  `name` varchar(100) NOT NULL,
+  PRIMARY KEY (`code`),
+  UNIQUE KEY `name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+--
+-- A tábla adatainak kiíratása `lng`
+--
+
+INSERT INTO `lng` (`code`, `name`) VALUES
+('en', 'english'),
+('hu', 'magyar');
+
+-- --------------------------------------------------------
+
+--
+-- Tábla szerkezet: `loc`
+--
+
+CREATE TABLE IF NOT EXISTS `loc` (
+  `code` varchar(2) NOT NULL,
+  `name` varchar(100) NOT NULL,
+  PRIMARY KEY (`code`),
+  UNIQUE KEY `location` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+--
+-- A tábla adatainak kiíratása `loc`
+--
+
+INSERT INTO `loc` (`code`, `name`) VALUES
+('hu', 'Magyarország'),
+('us', 'United States');
+
+-- --------------------------------------------------------
+
+--
+-- Tábla szerkezet: `locale`
+--
+
+CREATE TABLE IF NOT EXISTS `locale` (
+  `id` tinyint(4) NOT NULL AUTO_INCREMENT,
+  `lng` varchar(100) NOT NULL,
+  `loc` varchar(100) DEFAULT NULL,
+  `domain` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `domain` (`domain`),
+  KEY `loc` (`loc`),
+  KEY `lng` (`lng`)
+) ENGINE=InnoDB  DEFAULT CHARSET=utf8 AUTO_INCREMENT=4 ;
+
+--
+-- A tábla adatainak kiíratása `locale`
+--
+
+INSERT INTO `locale` (`id`, `lng`, `loc`, `domain`) VALUES
+(1, 'hu', NULL, NULL),
+(2, 'hu', 'hu', 'hugi.locale'),
+(3, 'en', NULL, NULL);
+
+-- --------------------------------------------------------
+
+--
+-- A nézet helyettes szerkezete `locale_info`
+--
+CREATE TABLE IF NOT EXISTS `locale_info` (
+`code` varchar(201)
+,`lng_code` varchar(100)
+,`loc_code` varchar(100)
+,`lng_name` varchar(100)
+,`loc_name` varchar(100)
+,`domain` varchar(100)
+);
+-- --------------------------------------------------------
+
+--
+-- Tábla szerkezet: `page`
+--
+
+CREATE TABLE IF NOT EXISTS `page` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `owner` int(10) unsigned DEFAULT NULL,
+  `visible` tinyint(1) NOT NULL DEFAULT '1',
+  `empty` tinyint(1) NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  KEY `owner` (`owner`)
+) ENGINE=InnoDB  DEFAULT CHARSET=utf8 AUTO_INCREMENT=7 ;
+
+--
+-- A tábla adatainak kiíratása `page`
+--
+
+INSERT INTO `page` (`id`, `owner`, `visible`, `empty`) VALUES
+(1, NULL, 1, 0),
+(2, NULL, 1, 0),
+(3, NULL, 1, 0),
+(4, NULL, 1, 0),
+(5, 2, 1, 0),
+(6, 2, 1, 0);
+
+-- --------------------------------------------------------
+
+--
+-- Tábla szerkezet: `page_lng`
+--
+
+CREATE TABLE IF NOT EXISTS `page_lng` (
+  `id` int(10) unsigned NOT NULL,
+  `lang` varchar(2) NOT NULL,
+  `name` varchar(100) NOT NULL,
+  `url` varchar(255) DEFAULT NULL,
+  `keywords` varchar(255) DEFAULT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`,`lang`),
+  UNIQUE KEY `keywords` (`keywords`),
+  UNIQUE KEY `description` (`description`),
+  KEY `lang` (`lang`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+--
+-- A tábla adatainak kiíratása `page_lng`
+--
+
+INSERT INTO `page_lng` (`id`, `lang`, `name`, `url`, `keywords`, `description`) VALUES
+(1, 'en', 'Homepage', 'home', 'hugi,hairdresser,dunaharaszti', 'The homepage.'),
+(1, 'hu', 'Kezdőlap', NULL, 'hugi,fodrász,dunaharaszti', 'A kezdőlap.'),
+(2, 'en', 'Content', NULL, NULL, 'Long page to test the design.'),
+(2, 'hu', 'Tartalom', NULL, NULL, 'Soksoros tartalom design teszthez.'),
+(3, 'en', 'Prices', NULL, NULL, 'A page that does not exist.'),
+(3, 'hu', 'Árak', 'arlista', NULL, 'Egy nem létező oldalra mutató link.'),
+(4, 'en', 'Whatever', NULL, NULL, 'An empty page to test the design.'),
+(4, 'hu', 'Akármi', NULL, NULL, 'Egy üres oldal, szintén design teszthez.'),
+(5, 'en', 'Introduction', NULL, NULL, 'Submenu test.'),
+(5, 'hu', 'Bemutatkozás', NULL, NULL, 'Almenü teszt.'),
+(6, 'en', 'Something', NULL, NULL, 'Submenu test again.'),
+(6, 'hu', 'Valami', NULL, NULL, 'Almenü teszt ismét.');
+
+-- --------------------------------------------------------
+
+--
+-- Tábla szerkezet: `page_prop`
+--
+
+CREATE TABLE IF NOT EXISTS `page_prop` (
+  `lang` varchar(2) NOT NULL,
+  `title` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`lang`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+--
+-- A tábla adatainak kiíratása `page_prop`
+--
+
+INSERT INTO `page_prop` (`lang`, `title`) VALUES
+('en', 'Hugi''s hairdressing salon - Dunaharaszti'),
+('hu', 'Hugi fodrászat - Dunaharaszti');
+
+-- --------------------------------------------------------
+
+--
+-- Nézet szerkezete `locale_info`
+--
+DROP TABLE IF EXISTS `locale_info`;
+
+CREATE ALGORITHM = UNDEFINED VIEW locale_info AS
+SELECT IF(locale.loc IS NULL, locale.lng, CONCAT(locale.lng, '-', locale.loc)) AS code, locale.lng AS lng_code, locale.loc AS loc_code, lng.name AS lng_name, loc.name AS loc_name, locale.domain
+-- , page_prop.*
+FROM locale
+LEFT JOIN loc ON locale.loc = loc.code
+LEFT JOIN lng ON locale.lng = lng.code
+-- LEFT JOIN page_prop ON lng.code = page_prop.lang
+ORDER BY id ASC;
+
+--
+-- Megkötések a kiírt táblákhoz
+--
+
+--
+-- Megkötések a táblához `dictionary`
+--
+ALTER TABLE `dictionary`
+  ADD CONSTRAINT `dictionary_ibfk_1` FOREIGN KEY (`lang`) REFERENCES `lng` (`code`);
+
+--
+-- Megkötések a táblához `locale`
+--
+ALTER TABLE `locale`
+  ADD CONSTRAINT `locale_ibfk_1` FOREIGN KEY (`lng`) REFERENCES `lng` (`code`),
+  ADD CONSTRAINT `locale_ibfk_2` FOREIGN KEY (`loc`) REFERENCES `loc` (`code`);
+
+--
+-- Megkötések a táblához `page`
+--
+ALTER TABLE `page`
+  ADD CONSTRAINT `page_ibfk_1` FOREIGN KEY (`owner`) REFERENCES `page` (`id`);
+
+--
+-- Megkötések a táblához `page_lng`
+--
+ALTER TABLE `page_lng`
+  ADD CONSTRAINT `page_lng_ibfk_1` FOREIGN KEY (`id`) REFERENCES `page` (`id`),
+  ADD CONSTRAINT `page_lng_ibfk_2` FOREIGN KEY (`lang`) REFERENCES `lng` (`code`);
+
+--
+-- Megkötések a táblához `page_prop`
+--
+ALTER TABLE `page_prop`
+  ADD CONSTRAINT `page_prop_ibfk_1` FOREIGN KEY (`lang`) REFERENCES `lng` (`code`);
+
